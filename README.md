@@ -6,6 +6,9 @@ allowing you to perform admin actions over a REST API.
 This is more of a proof of concept than anything, and may not be as functional as you would require for a production
 deployment.
 
+Hopefully, once all the admin features are implemented, the synapse compatibility module will allow for the
+Synapse Admin web app to be used with conduwuit.
+
 ## Usage
 
 You will need `fastapi[standard]`. You can install it with `pip install fastapi[standard]`.
@@ -26,3 +29,5 @@ fastapi run --host 0.0.0.0 --port 8000 src
 Note that API requests must also then be authenticated separately, however, this means that any administrator in the
 conduwuit admin room can perform actions over the API. You should use your own account access token to make requests
 to the API.
+
+Docs are then located at https://localhost:8000/docs.
