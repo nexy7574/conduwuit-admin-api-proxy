@@ -11,6 +11,7 @@ from urllib.parse import urlencode
 import httpx
 from fastapi import FastAPI, Depends, HTTPException, Body, APIRouter
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.middleware.cors import CORSMiddleware
 
 from .models import *
 
@@ -20,6 +21,7 @@ ADMIN_ROOM_ID = os.getenv("ADMIN_ROOM_ID")
 assert ADMIN_ROOM_ID is not None, "Please set the $ADMIN_ROOM_ID environment variable."
 ACCESS_TOKEN = os.getenv("ACCESS_TOKEN")
 assert ACCESS_TOKEN is not None, "Please set the $ACCESS_TOKEN environment variable."
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
 
 session = httpx.AsyncClient(base_url=MATRIX_HOMESERVER, headers={"Authorization": f"Bearer {ACCESS_TOKEN}"})
 security = HTTPBearer()
@@ -64,6 +66,13 @@ app = FastAPI(
         "name": "AGPL-3.0",
         "url": "https://www.gnu.org/licenses/agpl-3.0.html"
     }
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 log = logging.getLogger(__name__)
 pending_events: dict[str, asyncio.Event] = {}
