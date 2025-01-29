@@ -39,7 +39,7 @@ async def is_admin(credentials: HTTPAuthorizationCredentials = Depends(security)
         data = response.json()
         response = await session.get(
             f"/matrix/client/v3/rooms/{ADMIN_ROOM_ID}/joined_members",
-            headers={"Authorization": f"Bearer " + data["access_token"]}
+            headers={"Authorization": f"Bearer {credentials.credentials}"}
         )
         response.raise_for_status()
         return data["user_id"] in response.json().keys()
