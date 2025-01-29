@@ -33,7 +33,14 @@ async def is_admin(credentials: HTTPAuthorizationCredentials = Depends(security)
             headers={"Authorization": f"Bearer {credentials.credentials}"},
             timeout=None
         )
-        return response.status_code == 200
+        response.raise_for_status()
+        data = response.json()
+        response = await session.get(
+            f"/matrix/client/v3/rooms/{ADMIN_ROOM_ID}/joined_members",
+            headers={"Authorization": f"Bearer " + data["access_token"]}
+        )
+        response.raise_for_status()
+        return data["user_id"] in response.json().keys()
     except httpx.HTTPError:
         raise HTTPException(401, detail="Invalid access token.")
 
