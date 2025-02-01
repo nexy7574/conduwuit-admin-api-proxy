@@ -35,13 +35,14 @@ async def get_users():
     result = []
 
     tasks: dict[str, dict[str, asyncio.Task[httpx.Response]]] = {}
+    _tasks = []
     for user_id in user_ids:
+        display_name = admin_room_members[user_id].get("displayname", user_id)
+        avatar_url = admin_room_members[user_id].get("avatar_url")
         if user_id in admin_room_members:
-            display_name = admin_room_members[user_id].get("displayname", user_id)
-            avatar_url = admin_room_members[user_id].get("avatar_url")
             is_admin = True
         else:
-            display_name = asyncio.create_task(
+            display_name_task = asyncio.create_task(
                     session.get(
                     "/_matrix/client/v3/profile/{}/displayname".format(user_id),
                     headers={
@@ -49,7 +50,7 @@ async def get_users():
                     }
                 )
             )
-            avatar_url = asyncio.create_task(
+            avatar_url_task = asyncio.create_task(
                 session.get(
                     "/_matrix/client/v3/profile/{}/avatar_url".format(user_id),
                     headers={
@@ -57,11 +58,12 @@ async def get_users():
                     }
                 )
             )
+            _tasks += [display_name_task, avatar_url_task]
             is_admin = False
-        tasks[user_id] = {
-            "displayname": display_name,
-            "avatar_url": avatar_url
-        }
+            tasks[user_id] = {
+                "displayname": display_name_task,
+                "avatar_url": avatar_url_task
+            }
         result.append(
             {
                 "name": user_id,
@@ -70,8 +72,8 @@ async def get_users():
                 "admin": is_admin,
                 "deactivated": False,
                 "shadow_banned": False,
-                "display_name": user_id,
-                "avatar_url": None,
+                "display_name": display_name,
+                "avatar_url": avatar_url,
                 "creation_ts": 0,
                 "approved": True,
                 "erased": False,
@@ -80,7 +82,7 @@ async def get_users():
             }
         )
 
-    await asyncio.gather(*[task for task in tasks.values()], return_exceptions=True)
+    await asyncio.gather(*_tasks, return_exceptions=True)
     for user_id, task in tasks.items():
         for task_name, task_obj in task.items():
             # noinspection PyBroadException
