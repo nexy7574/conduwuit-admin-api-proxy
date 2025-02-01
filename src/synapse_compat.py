@@ -105,7 +105,7 @@ async def get_users():
         "total": len(results)
     }
 
-@router.get("/_synapse/admin/v2/users/{user_id}")
+@router.get("/v2/users/{user_id}")
 async def get_user(user_id: str):
     """https://element-hq.github.io/synapse/latest/admin_api/user_admin_api.html#query-user-account"""
     from .server import session, ADMIN_ROOM_ID, ACCESS_TOKEN
@@ -158,7 +158,7 @@ async def get_user(user_id: str):
     }
 
 
-@router.put("/_synapse/admin/v2/users/{user_id}")
+@router.put("/v2/users/{user_id}")
 async def create_or_update_user(res: JSONResponse, body: SynapsePutUser, user_id: str):
     """https://element-hq.github.io/synapse/latest/admin_api/user_admin_api.html#create-or-modify-account"""
     from .server import deactivate_user, reset_password
@@ -173,7 +173,7 @@ async def create_or_update_user(res: JSONResponse, body: SynapsePutUser, user_id
     return res_body
 
 
-@router.get("/_synapse/admin/v1/whois/{user_id}")
+@router.get("/v1/whois/{user_id}")
 async def get_user_sessions(user_id: str):
     # No data
     return {"user_id": user_id, "devices": {}}
