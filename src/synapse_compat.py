@@ -37,8 +37,8 @@ async def get_users():
     tasks: dict[str, dict[str, asyncio.Task[httpx.Response]]] = {}
     _tasks = []
     for user_id in user_ids:
-        display_name = admin_room_members[user_id].get("displayname", user_id)
-        avatar_url = admin_room_members[user_id].get("avatar_url")
+        display_name = admin_room_members.get(user_id, {}).get("displayname", user_id)
+        avatar_url = admin_room_members.get(user_id, {}).get("avatar_url")
         if user_id in admin_room_members:
             is_admin = True
         else:
