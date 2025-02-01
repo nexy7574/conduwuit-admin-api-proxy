@@ -32,7 +32,7 @@ async def get_users():
             detail=admin_room_members.text
         )
     admin_room_members = admin_room_members.json()
-    result = []
+    results = []
 
     tasks: dict[str, dict[str, asyncio.Task[httpx.Response]]] = {}
     _tasks = []
@@ -64,7 +64,7 @@ async def get_users():
                 "displayname": display_name_task,
                 "avatar_url": avatar_url_task
             }
-        result.append(
+        results.append(
             {
                 "name": user_id,
                 "user_type": None,
@@ -78,7 +78,8 @@ async def get_users():
                 "approved": True,
                 "erased": False,
                 "last_seen_ts": 0,
-                "locked": False
+                "locked": False,
+                "user_id": user_id
             }
         )
 
@@ -94,9 +95,14 @@ async def get_users():
                 result = (result.json().get("displayname") or user_id) if result.status_code == 200 else user_id
             else:
                 result = result.json().get("avatar_url") if result.status_code == 200 else None
+            for user in results:
+                if user["user_id"] == user_id:
+                    user["display_name"] = result if task_name == "displayname" else user["display_name"]
+                    user["avatar_url"] = result if task_name == "avatar_url" else user["avatar_url"]
+                    break
     return {
-        "users": result,
-        "total": len(result)
+        "users": results,
+        "total": len(results)
     }
 
 @router.get("/_synapse/admin/v2/users/{user_id}")
