@@ -1,5 +1,7 @@
+import asyncio
 import typing
 
+import httpx
 from fastapi import APIRouter, HTTPException, Body
 from fastapi.responses import JSONResponse
 
@@ -31,27 +33,35 @@ async def get_users():
         )
     admin_room_members = admin_room_members.json()
     result = []
+
+    tasks: dict[str, dict[str, asyncio.Task[httpx.Response]]] = {}
     for user_id in user_ids:
         if user_id in admin_room_members:
             display_name = admin_room_members[user_id].get("displayname", user_id)
             avatar_url = admin_room_members[user_id].get("avatar_url")
             is_admin = True
         else:
-            display_name = await session.get(
-                "/_matrix/client/v3/profile/{}/displayname".format(user_id),
-                headers={
-                    "Authorization": f"Bearer {ACCESS_TOKEN}"
-                }
+            display_name = asyncio.create_task(
+                    session.get(
+                    "/_matrix/client/v3/profile/{}/displayname".format(user_id),
+                    headers={
+                        "Authorization": f"Bearer {ACCESS_TOKEN}"
+                    }
+                )
             )
-            display_name = (display_name.json().get("displayname") or user_id) if display_name.status_code == 200 else user_id
-            avatar_url = await session.get(
-                "/_matrix/client/v3/profile/{}/avatar_url".format(user_id),
-                headers={
-                    "Authorization": f"Bearer {ACCESS_TOKEN}"
-                }
+            avatar_url = asyncio.create_task(
+                session.get(
+                    "/_matrix/client/v3/profile/{}/avatar_url".format(user_id),
+                    headers={
+                        "Authorization": f"Bearer {ACCESS_TOKEN}"
+                    }
+                )
             )
             is_admin = False
-            avatar_url = avatar_url.json().get("avatar_url") if avatar_url.status_code == 200 else None
+        tasks[user_id] = {
+            "displayname": display_name,
+            "avatar_url": avatar_url
+        }
         result.append(
             {
                 "name": user_id,
@@ -60,8 +70,8 @@ async def get_users():
                 "admin": is_admin,
                 "deactivated": False,
                 "shadow_banned": False,
-                "display_name": display_name,
-                "avatar_url": avatar_url,
+                "display_name": user_id,
+                "avatar_url": None,
                 "creation_ts": 0,
                 "approved": True,
                 "erased": False,
@@ -70,6 +80,18 @@ async def get_users():
             }
         )
 
+    await asyncio.gather(*[task for task in tasks.values()], return_exceptions=True)
+    for user_id, task in tasks.items():
+        for task_name, task_obj in task.items():
+            # noinspection PyBroadException
+            try:
+                result = task_obj.result()
+            except Exception:
+                continue
+            if task_name == "displayname":
+                result = (result.json().get("displayname") or user_id) if result.status_code == 200 else user_id
+            else:
+                result = result.json().get("avatar_url") if result.status_code == 200 else None
     return {
         "users": result,
         "total": len(result)
