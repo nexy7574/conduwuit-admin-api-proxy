@@ -4,7 +4,8 @@ __all__ = (
     "CreateUserRequest",
     "ResetUserPasswordRequest",
     "JoinedRoom",
-    "RoomInfoMember"
+    "RoomInfoMember",
+    "SynapsePutUser",
 )
 
 
@@ -36,3 +37,9 @@ class RoomInfoMember(BaseModel):
     """The user's fully qualified matrix user ID"""
     display_name: str = Field("")
     """The user's display name, if available."""
+
+
+class SynapsePutUser(BaseModel):
+    password: str = None
+    admin: bool = None
+    deactivated: bool = None

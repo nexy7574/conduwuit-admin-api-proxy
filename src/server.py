@@ -239,7 +239,7 @@ async def list_users() -> list[str]:
 
 
 @conduwuit_router.delete("/users/{user_id}", status_code=204, tags=["Users"])
-async def delete_user(user_id: str, leave_rooms: bool = True) -> None:
+async def deactivate_user(user_id: str, leave_rooms: bool = True) -> None:
     """
     Deactivates a user's account.
 
