@@ -178,6 +178,13 @@ async def create_or_update_user(res: JSONResponse, body: SynapsePutUser, user_id
     return res_body
 
 
+@router.post("/v1/deactivate/{user_id}")
+async def deactivate_user(user_id: str):
+    from .server import deactivate_user
+    await deactivate_user(user_id)
+    return {"deactivated": True}
+
+
 @router.get("/v1/whois/{user_id}")
 async def get_user_sessions(user_id: str):
     # No data

@@ -166,9 +166,9 @@ async def send_and_wait(
     )
     r.raise_for_status()
     event_id = r.json()["event_id"]
-    log.debug("Waiting for event %s to be received.", event_id)
     event = asyncio.Event()
     pending_events[event_id] = event
+    log.debug("Waiting for event %s to be received.", event_id)
     await event.wait()
     for event in event_cache:
         reply = event["content"].get("m.relates_to", {}).get("m.in_reply_to", {}).get("event_id")
