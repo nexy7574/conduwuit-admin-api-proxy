@@ -518,6 +518,40 @@ async def get_all_rooms(
     return rooms
 
 
+@conduwuit_router.get("/rooms/banned", tags=["Rooms"])
+async def get_banned_rooms() -> list[JoinedRoom]:
+    """Fetches all rooms that the server knows about
+
+    If `exclude_disabled` is True, rooms that have federation disabled will not be included.
+    Likewise, if `exclude_banned` is True, rooms that have been banned will not be included.
+
+    If the `page` parameter is set, it will return a paginated list of rooms.
+    Returns an empty array if no more rooms are found.
+    """
+    command = ["!admin", "rooms", "moderation", "list-banned-rooms"]
+
+    event = await send_and_wait(" ".join(command))
+    content = event["content"]["body"]
+    if content == "No rooms found.":
+        return []
+    rooms = []
+    for line in content.splitlines():
+        if not line.startswith("!"):
+            continue
+        room_id, members_part, name_part = line.split("\t", 2)
+        try:
+            members = int(members_part.split()[1])
+        except ValueError:
+            members = 0
+        try:
+            name = name_part.split(" ", 1)[1]
+        except IndexError:
+            name = room_id
+        rooms.append(JoinedRoom(room_id=room_id, members=members, name=name))
+
+    return rooms
+
+
 @conduwuit_router.get("/rooms/{room_id}/members", tags=["Rooms"])
 async def get_room_members(room_id: str) -> list[RoomInfoMember]:
     """Fetches a list of joined members in a room."""

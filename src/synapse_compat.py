@@ -1,8 +1,10 @@
 import asyncio
+import re
 import typing
 
 import httpx
 from fastapi import APIRouter, HTTPException, Body
+from fastapi.params import Query
 from fastapi.responses import JSONResponse
 
 from src.models import SynapsePutUser
@@ -10,6 +12,9 @@ from src.models import SynapsePutUser
 router = APIRouter(
     prefix="/_synapse/admin",
     tags=["Synapse Compatibility"]
+)
+ROOM_ORDER_BY_REGEX = (
+    r"^(?:name|canonical_alias|joined_members)$"
 )
 
 
@@ -177,3 +182,143 @@ async def create_or_update_user(res: JSONResponse, body: SynapsePutUser, user_id
 async def get_user_sessions(user_id: str):
     # No data
     return {"user_id": user_id, "devices": {}}
+
+
+@router.get("/v1/rooms")
+async def get_room_list(
+        _from: typing.Annotated[int, Query(0, alias="from", ge=0)] = 0,
+        limit: typing.Annotated[int, Query(100, gt=0, le=100)] = 100,
+        order_by: typing.Annotated[str, Query("name", regex=ROOM_ORDER_BY_REGEX)] = "name",
+        direction: typing.Annotated[str, Query("f", regex=r"^(f|b)$", alias="dir")] = "f",
+        search_term: str = "",
+        empty_rooms: bool | None = None
+):
+    """
+    See: https://element-hq.github.io/synapse/latest/admin_api/rooms.html
+
+    Some order types and parameters are not supported.
+    """
+    from .server import get_all_rooms
+    rooms = await get_all_rooms()
+
+    candidates = []
+    for room in rooms:
+        if search_term and search_term not in room.name + "\0" + room.room_id:
+            continue
+        if empty_rooms is not None:
+            if empty_rooms and room.members == 0:
+                candidates.append(room)
+            elif not empty_rooms and room.members > 0:
+                candidates.append(room)
+            else:
+                continue
+        candidates.append(room)
+
+    match order_by:
+        case "name":
+            candidates.sort(key=lambda x: x.name, reverse=direction == "b")
+        case "canonical_alias":
+            candidates.sort(key=lambda x: x.id, reverse=direction == "b")
+        case "joined_members":
+            candidates.sort(key=lambda x: x.members, reverse=direction == "b")
+
+    selected = candidates[_from:_from + limit]
+    next_batch = _from + limit if _from + limit < len(candidates) else None
+    response = {
+        "offset": len(selected) - 1,
+        "rooms": [
+            {
+                "name": x.name,
+                "room_id": x.room_id,
+                "joined_members": x.members,
+                "joined_local_members": x.members,
+                "canonical_alias": x.room_id,
+                "version": "1",
+                "creator": "@admin:localhost",
+                "encryption": None,
+                "federatable": True,
+                "public": False,
+                "join_rules": "invite" if x.members <= 2 else "public",  # decent guess?
+                "guest_access": "forbidden",
+                "history_visibility": "shared",
+                "state_events": 5 + x.members,
+            } for x in selected
+        ],
+        "total_rooms": len(rooms)
+    }
+    if next_batch is not None:
+        response["next_batch"] = next_batch
+    prev_batch = _from - limit if _from - limit >= 0 else None
+    if prev_batch is not None:
+        response["prev_batch"] = prev_batch
+    return response
+
+@router.get("/v1/rooms/{room_id}")
+async def get_room_details(room_id: str):
+    from .server import get_room_topic, get_room_members
+    room_topic = await get_room_topic(room_id)
+    room_members = await get_room_members(room_id)
+    return {
+        "name": room_id,
+        "room_id": room_id,
+        "joined_members": len(room_members),
+        "joined_local_members": len(room_members),
+        "canonical_alias": room_id,
+        "version": "1",
+        "creator": "@admin:localhost",
+        "encryption": None,
+        "federatable": True,
+        "public": False,
+        "join_rules": "invite" if len(room_members) <= 2 else "public",  # decent guess?
+        "guest_access": "forbidden",
+        "history_visibility": "shared",
+        "state_events": 6 + len(room_members),
+        "topic": room_topic,
+        "forgotten": len(room_members) == 0
+    }
+
+@router.get("/v1/rooms/{room_id}/members")
+async def get_room_members(room_id: str):
+    from .server import get_room_members as get_members
+    members = await get_members(room_id)
+    return {
+        "total": len(members),
+        "members": [
+            x.user_id for x in members
+        ]
+    }
+
+@router.put("/v1/rooms/{room_id}/block")
+async def block_room(room_id: str):
+    from .server import ban_room
+    await ban_room(room_id, True, True)
+    return {"block": True}
+
+
+@router.put("/v1/rooms/{room_id}/block")
+async def get_room_block(room_id: str):
+    from .server import get_banned_rooms
+    banned_rooms = await get_banned_rooms()
+    for room in banned_rooms:
+        if room.room_id == room_id:
+            return {"block": True}
+    return {"block": False}
+
+
+@router.delete("/v1/rooms/{room_id}")
+@router.delete("/v2/rooms/{room_id}")
+async def ban_room(room_id: str):
+    """Disables a room. Note that unlike with Synapse, this will always evacuate and defederate the room.
+
+    The request body is ignored."""
+    from .server import ban_room
+    asyncio.create_task(ban_room(room_id, True, True))
+    return {
+        "kicked_users": [],
+        "failed_to_kick_users": [],
+        "local_aliases": [],
+        "new_room_id": "!invalid:invalid.invalid",
+        "delete_id": "N/A"
+    }
+
+
