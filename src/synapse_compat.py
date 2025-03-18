@@ -186,10 +186,10 @@ async def get_user_sessions(user_id: str):
 
 @router.get("/v1/rooms")
 async def get_room_list(
-        _from: typing.Annotated[int, Query(0, alias="from", ge=0)] = 0,
-        limit: typing.Annotated[int, Query(100, gt=0, le=100)] = 100,
-        order_by: typing.Annotated[str, Query("name", regex=ROOM_ORDER_BY_REGEX)] = "name",
-        direction: typing.Annotated[str, Query("f", regex=r"^(f|b)$", alias="dir")] = "f",
+        _from: typing.Annotated[int, Query(..., alias="from", ge=0)] = 0,
+        limit: typing.Annotated[int, Query(..., gt=0, le=100)] = 100,
+        order_by: typing.Annotated[str, Query(..., regex=ROOM_ORDER_BY_REGEX)] = "name",
+        direction: typing.Annotated[str, Query(..., regex=r"^(f|b)$", alias="dir")] = "f",
         search_term: str = "",
         empty_rooms: bool | None = None
 ):
