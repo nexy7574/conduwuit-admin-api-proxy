@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Body
 from fastapi.params import Query
 from fastapi.responses import JSONResponse
 
-from src.models import SynapsePutUser
+from src.models import SynapsePutUser, SynapsePutSuspendUser
 
 router = APIRouter(
     prefix="/_synapse/admin",
@@ -172,7 +172,7 @@ async def create_or_update_user(res: JSONResponse, body: SynapsePutUser, user_id
     if body.password is not None:
         _r = await reset_password(user_id, body.password)
         res_body["password_changed"] = _r
-    if body.deactivated is True:
+    if body.deactivated:
         _r = await deactivate_user(user_id, body.deactivated)
         res_body["deactivated"] = _r
     return res_body
@@ -183,6 +183,14 @@ async def deactivate_user(user_id: str):
     from .server import deactivate_user
     await deactivate_user(user_id)
     return {"deactivated": True}
+
+
+@router.put("/v1/suspend/{user_id}")
+async def suspend_user(body: SynapsePutSuspendUser, user_id: str):
+    from .server import suspend_user, unsuspend_user
+    if body.suspend:
+        return await suspend_user(user_id)
+    return await unsuspend_user(user_id)
 
 
 @router.get("/v1/whois/{user_id}")

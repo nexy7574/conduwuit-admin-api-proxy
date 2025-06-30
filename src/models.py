@@ -6,6 +6,7 @@ __all__ = (
     "JoinedRoom",
     "RoomInfoMember",
     "SynapsePutUser",
+    "SynapsePutSuspendUser",
 )
 
 
@@ -43,3 +44,7 @@ class SynapsePutUser(BaseModel):
     password: str = None
     admin: bool = None
     deactivated: bool = None
+
+
+class SynapsePutSuspendUser(BaseModel):
+    suspend: bool
