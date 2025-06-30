@@ -1,13 +1,19 @@
-# conduwuit Admin API Proxy
+# continuwuity Admin API Proxy
 
-An unofficial unfinished experimental API that proxies HTTP requests to the conduwuit admin room,
+[![Chat on Matrix](https://img.shields.io/matrix/continuwuity%3Acontinuwuity.org?server_fqdn=matrix.continuwuity.org&fetchMode=summary&logo=matrix)](https://matrix.to/#/#continuwuity:continuwuity.org?via=continuwuity.org&via=ellis.link&via=explodie.org&via=matrix.org) [![Join the space](https://img.shields.io/matrix/space%3Acontinuwuity.org?server_fqdn=matrix.continuwuity.org&fetchMode=summary&logo=matrix&label=space)](https://matrix.to/#/#space:continuwuity.org?via=continuwuity.org&via=ellis.link&via=explodie.org&via=matrix.org)
+[![forgejo.ellis.link](https://img.shields.io/badge/Ellis%20Git-main+packages-green?style=flat&logo=forgejo&labelColor=fff)](https://forgejo.ellis.link/continuwuation/continuwuity)
+
+An unofficial unfinished experimental API that proxies HTTP requests to the continuwuity admin room,
 allowing you to perform admin actions over a REST API.
 
 This is more of a proof of concept than anything, and may not be as functional as you would require for a production
 deployment.
 
 Hopefully, once all the admin features are implemented, the synapse compatibility module will allow for the
-Synapse Admin web app to be used with conduwuit.
+Synapse Admin web app to be used with continuwuity.
+
+> [!IMPORTANT]
+> This will be replaced by an official admin API soon.
 
 ## Usage
 
@@ -27,7 +33,7 @@ fastapi run --host 0.0.0.0 --port 8000 src
 ```
 
 Note that API requests must also then be authenticated separately, however, this means that any administrator in the
-conduwuit admin room can perform actions over the API. You should use your own account access token to make requests
+continuwuity admin room can perform actions over the API. You should use your own account access token to make requests
 to the API.
 
 Docs are then located at https://localhost:8000/docs.
