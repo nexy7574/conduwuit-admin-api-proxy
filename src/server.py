@@ -60,8 +60,8 @@ async def lifecycle(_):
 app = FastAPI(
     dependencies=[Depends(is_admin, use_cache=True)],
     lifespan=lifecycle,
-    title="conduwuit Admin API Proxy",
-    summary="A proxy server that translates API calls into admin commands for conduwuit.",
+    title="continuwuity Admin API Proxy",
+    summary="A proxy server that translates API calls into admin commands for continuwuity.",
     license_info={
         "name": "AGPL-3.0",
         "url": "https://www.gnu.org/licenses/agpl-3.0.html"
@@ -78,8 +78,8 @@ log = logging.getLogger(__name__)
 pending_events: dict[str, asyncio.Event] = {}
 event_cache = collections.deque(maxlen=1000)
 
-conduwuit_router = APIRouter(
-    prefix="/_conduwuit/admin",
+continuwuity_router = APIRouter(
+    prefix="/_continuwuity/admin",
 )
 
 
@@ -177,7 +177,7 @@ async def send_and_wait(
     raise ValueError("Event not found in cache, even though it was received.")
 
 
-@conduwuit_router.post("/users/create", tags=["Users"])
+@continuwuity_router.post("/users/create", tags=["Users"])
 async def create_user(payload: CreateUserRequest) -> CreateUserRequest:
     """
     Creates a new user.
@@ -187,7 +187,7 @@ async def create_user(payload: CreateUserRequest) -> CreateUserRequest:
     return payload
 
 
-@conduwuit_router.post("/users/reset-password", tags=["Users"])
+@continuwuity_router.post("/users/reset-password", tags=["Users"])
 async def reset_password(payload: ResetUserPasswordRequest) -> ResetUserPasswordRequest:
     """
     Resets the password of a user.
@@ -221,7 +221,7 @@ async def reset_password(payload: ResetUserPasswordRequest) -> ResetUserPassword
     return ResetUserPasswordRequest(user_id=payload.user_id, password=response_password)
 
 
-@conduwuit_router.get("/users/list", tags=["Users"])
+@continuwuity_router.get("/users/list", tags=["Users"])
 async def list_users() -> list[str]:
     """
     Lists all users on the server.
@@ -238,7 +238,7 @@ async def list_users() -> list[str]:
     return users
 
 
-@conduwuit_router.delete("/users/{user_id}", status_code=204, tags=["Users"])
+@continuwuity_router.delete("/users/{user_id}", status_code=204, tags=["Users"])
 async def deactivate_user(user_id: str, leave_rooms: bool = True) -> None:
     """
     Deactivates a user's account.
@@ -250,10 +250,12 @@ async def deactivate_user(user_id: str, leave_rooms: bool = True) -> None:
         Deactivating a user that does not exist will implicitly create them.
 
         You can re-activate a user by resetting their password.
+
+        Deactivating an account without leaving rooms is almost akin to locking their account.
     """
 
     command_parts = ["!admin", "users", "deactivate", user_id]
-    if leave_rooms is False:
+    if not leave_rooms:
         command_parts.insert(3, "--no-leave-rooms")
     event = await send_and_wait(" ".join(command_parts))
     content = event["content"]["body"]
@@ -262,7 +264,7 @@ async def deactivate_user(user_id: str, leave_rooms: bool = True) -> None:
     if not content.endswith("has been deactivated"):
         raise ValueError(f"Unexpected response: {content!r}")
 
-@conduwuit_router.post("/users/bulk-deactivate", tags=["Users"], status_code=204)
+@continuwuity_router.post("/users/bulk-deactivate", tags=["Users"], status_code=204)
 async def bulk_deactivate_users(
         user_ids: typing.Annotated[list[str], Body(...)],
         leave_rooms: bool = True,
@@ -297,7 +299,46 @@ async def bulk_deactivate_users(
     if content == "Deactivated 0 accounts.":
         raise HTTPException(400, detail="No accounts were deactivated.")
 
-@conduwuit_router.get("/users/{user_id}/rooms", tags=["Users"])
+@continuwuity_router.put("/users/{user_id}/suspend", tags=["Users"], status_code=204)
+async def suspend_user(user_id: str):
+    """
+    Suspends the given user
+
+    Suspending a user places their account in a read-only state where they cannot interact with rooms.
+    This is supposed to be temporary and intentionally reversible.
+
+    You cannot suspend admin users.
+
+    Requires continuwuity 0.5.0rc7 or above.
+    """
+    command_parts = ["!admin", "users", "suspend", user_id]
+    event = await send_and_wait(" ".join(command_parts))
+    content = event["content"]["body"]
+    if "does not belong to our server" in content:
+        raise HTTPException(400, detail="Attempted to suspend a user on another server.")
+    if "does not exist" in content:
+        raise HTTPException(404, detail="User does not exist.")
+    if not content.endswith("has been suspended."):
+        raise ValueError(f"Unexpected response: {content!r}")
+
+@continuwuity_router.delete("/users/{user_id}/suspend", status_code=204)
+async def unsuspend_user(user_id: str):
+    """
+    Unsuspends a previously suspended user, re-placing their account in a read-write state.
+
+    Requires continuwuity 0.5.0rc7 or above
+    """
+    command_parts = ["!admin", "users", "unsuspend", user_id]
+    event = await send_and_wait(" ".join(command_parts))
+    content = event["content"]["body"]
+    if "does not belong to our server" in content:
+        raise HTTPException(400, detail="Attempted to unsuspend a user on another server.")
+    if "does not exist" in content:
+        raise HTTPException(404, detail="User does not exist.")
+    if not content.endswith("has been unsuspended."):
+        raise ValueError(f"Unexpected response: {content!r}")
+
+@continuwuity_router.get("/users/{user_id}/rooms", tags=["Users"])
 async def get_user_joined_rooms(user_id: str) -> list[JoinedRoom]:
     """Returns a list of rooms that the user is in."""
     command = ["!admin", "users", "list-joined-rooms", user_id]
@@ -325,7 +366,7 @@ async def get_user_joined_rooms(user_id: str) -> list[JoinedRoom]:
     return rooms
 
 
-@conduwuit_router.post("/users/{user_id}/rooms/{room_id}", tags=["Users"], status_code=204)
+@continuwuity_router.post("/users/{user_id}/rooms/{room_id}", tags=["Users"], status_code=204)
 async def force_user_join_room(user_id: str, room_id: str) -> None:
     """Forces a user to join a room."""
     command = ["!admin", "users", "force-join-room", user_id, room_id]
@@ -341,7 +382,7 @@ async def force_user_join_room(user_id: str, room_id: str) -> None:
         raise ValueError(f"Unexpected response: {content!r}")
 
 
-@conduwuit_router.delete("/users/{user_id}/rooms/{room_id}", tags=["Users"], status_code=204)
+@continuwuity_router.delete("/users/{user_id}/rooms/{room_id}", tags=["Users"], status_code=204)
 async def force_user_leave_room(user_id: str, room_id: str) -> None:
     """Forces a user to leave a room."""
     command = ["!admin", "users", "force-leave-room", user_id, room_id]
@@ -357,7 +398,7 @@ async def force_user_leave_room(user_id: str, room_id: str) -> None:
         raise ValueError(f"Unexpected response: {content!r}")
 
 
-@conduwuit_router.post("/users/{user_id}/rooms/{room_id}/demote", tags=["Users"], status_code=204)
+@continuwuity_router.post("/users/{user_id}/rooms/{room_id}/demote", tags=["Users"], status_code=204)
 async def force_user_demote(user_id: str, room_id: str) -> None:
     """
     Forces a user to demote themselves to the room's default power level in the given room, permitted they're able to.
@@ -377,7 +418,7 @@ async def force_user_demote(user_id: str, room_id: str) -> None:
         raise ValueError(f"Unexpected response: {content!r}")
 
 
-@conduwuit_router.post("/users/{user_id}/make-admin", tags=["Users"], status_code=204)
+@continuwuity_router.post("/users/{user_id}/make-admin", tags=["Users"], status_code=204)
 async def force_user_make_admin(user_id: str) -> None:
     """Make a user a server administrator."""
     command = ["!admin", "users", "make-user-admin", user_id]
@@ -393,7 +434,7 @@ async def force_user_make_admin(user_id: str) -> None:
         raise ValueError(f"Unexpected response: {content!r}")
 
 
-@conduwuit_router.delete("/users/{event_id}", tags=["Users"], status_code=204)
+@continuwuity_router.delete("/users/{event_id}", tags=["Users"], status_code=204)
 async def force_redact_event(event_id: str) -> None:
     """
     Attempts to forcefully redact the specified event ID from the author.
@@ -417,7 +458,7 @@ async def force_redact_event(event_id: str) -> None:
         raise ValueError(f"Unexpected response: {content!r}")
 
 
-@conduwuit_router.post("/users/bulk-force-join", tags=["Users"])
+@continuwuity_router.post("/users/bulk-force-join", tags=["Users"])
 async def bulk_force_join_users(
         user_ids: typing.Annotated[list[str], Body(...)],
         room_id: str
@@ -448,7 +489,7 @@ async def bulk_force_join_users(
     return count, failed
 
 
-@conduwuit_router.post("/users/bulk-force-join/all", tags=["Users"])
+@continuwuity_router.post("/users/bulk-force-join/all", tags=["Users"])
 async def bulk_force_join_all_users(
         room_id: str
 ) -> tuple[int, int]:
@@ -474,7 +515,7 @@ async def bulk_force_join_all_users(
 
 
 # Rooms
-@conduwuit_router.get("/rooms/list", tags=["Rooms"])
+@continuwuity_router.get("/rooms/list", tags=["Rooms"])
 async def get_all_rooms(
         page: int = 0,
         exclude_disabled: bool = False,
@@ -518,7 +559,7 @@ async def get_all_rooms(
     return rooms
 
 
-@conduwuit_router.get("/rooms/banned", tags=["Rooms"])
+@continuwuity_router.get("/rooms/banned", tags=["Rooms"])
 async def get_banned_rooms() -> list[JoinedRoom]:
     """Fetches all rooms that the server knows about
 
@@ -552,7 +593,7 @@ async def get_banned_rooms() -> list[JoinedRoom]:
     return rooms
 
 
-@conduwuit_router.get("/rooms/{room_id}/members", tags=["Rooms"])
+@continuwuity_router.get("/rooms/{room_id}/members", tags=["Rooms"])
 async def get_room_members(room_id: str) -> list[RoomInfoMember]:
     """Fetches a list of joined members in a room."""
     command = ["!admin", "rooms", "info", "list-joined-members", room_id]
@@ -572,7 +613,7 @@ async def get_room_members(room_id: str) -> list[RoomInfoMember]:
     return users
 
 
-@conduwuit_router.get("/rooms/{room_id}/topic", tags=["Rooms"])
+@continuwuity_router.get("/rooms/{room_id}/topic", tags=["Rooms"])
 async def get_room_topic(room_id: str) -> str:
     """Fetches the topic of a room."""
     command = ["!admin", "rooms", "info", "view-room-topic", room_id]
@@ -583,7 +624,7 @@ async def get_room_topic(room_id: str) -> str:
     return "\n".join("\n".splitlines()[2:-1])
 
 
-@conduwuit_router.post("/rooms/{room_id}/ban", tags=["Room Moderation"], status_code=204)
+@continuwuity_router.post("/rooms/{room_id}/ban", tags=["Room Moderation"], status_code=204)
 async def ban_room(
         room_id: str,
         force: bool = False,
@@ -609,7 +650,7 @@ async def ban_room(
         raise ValueError(f"Unexpected response: {content!r}")
 
 
-@conduwuit_router.post("/rooms/{room_id}/unban", tags=["Room Moderation"], status_code=204)
+@continuwuity_router.post("/rooms/{room_id}/unban", tags=["Room Moderation"], status_code=204)
 async def unban_room(room_id: str, enable_federation: bool = False) -> None:
     """Unbans a room from the server, optionally re-enabling federation."""
     command = ["!admin", "rooms", "moderation", "unban-room", room_id]
@@ -621,7 +662,7 @@ async def unban_room(room_id: str, enable_federation: bool = False) -> None:
         raise ValueError(f"Unexpected response: {content!r}")
 
 
-@conduwuit_router.post("/rooms/bulk-ban", tags=["Room Moderation"], status_code=204)
+@continuwuity_router.post("/rooms/bulk-ban", tags=["Room Moderation"], status_code=204)
 async def bulk_ban_rooms(
         room_ids: typing.Annotated[list[str], Body(...)],
         force: bool = False,
@@ -649,7 +690,7 @@ async def bulk_ban_rooms(
         raise ValueError(f"Unexpected response: {content!r}")
 
 
-@conduwuit_router.post("/rooms/directory/publish/{room_id}", tags=["Room Directory"], status_code=204)
+@continuwuity_router.post("/rooms/directory/publish/{room_id}", tags=["Room Directory"], status_code=204)
 async def publish_room_to_directory(room_id: str) -> None:
     """Publishes a room to the public directory."""
     command = ["!admin", "rooms", "directory", "publish", room_id]
@@ -659,7 +700,7 @@ async def publish_room_to_directory(room_id: str) -> None:
         raise ValueError(f"Unexpected response: {content!r}")
 
 
-@conduwuit_router.delete("/rooms/directory/unpublish/{room_id}", tags=["Room Directory"], status_code=204)
+@continuwuity_router.delete("/rooms/directory/unpublish/{room_id}", tags=["Room Directory"], status_code=204)
 async def unpublish_room_from_directory(room_id: str) -> None:
     """Unpublishes a room from the public directory."""
     command = ["!admin", "rooms", "directory", "unpublish", room_id]
@@ -669,7 +710,7 @@ async def unpublish_room_from_directory(room_id: str) -> None:
         raise ValueError(f"Unexpected response: {content!r}")
 
 
-@conduwuit_router.get("/rooms/directory/list", tags=["Room Directory"])
+@continuwuity_router.get("/rooms/directory/list", tags=["Room Directory"])
 async def list_rooms_in_directory(page: int = 1) -> list[JoinedRoom]:
     """Lists all rooms in the public directory."""
     command = ["!admin", "rooms", "directory", "list"]
@@ -692,7 +733,7 @@ async def list_rooms_in_directory(page: int = 1) -> list[JoinedRoom]:
     return rooms
 
 
-@conduwuit_router.post("/rooms/aliases/set", tags=["Room Aliases"])
+@continuwuity_router.post("/rooms/aliases/set", tags=["Room Aliases"])
 async def set_room_alias(
         room_id: str,
         alias_name: str,
@@ -716,7 +757,7 @@ async def set_room_alias(
         raise ValueError(f"Unexpected response: {content!r}")
 
 
-@conduwuit_router.delete("/rooms/aliases/{alias_name}", tags=["Room Aliases"], status_code=204)
+@continuwuity_router.delete("/rooms/aliases/{alias_name}", tags=["Room Aliases"], status_code=204)
 async def remove_room_alias(alias_name: str) -> None:
     """Removes an alias from the server."""
     command = ["!admin", "rooms", "alias", "remove", alias_name]
@@ -726,7 +767,7 @@ async def remove_room_alias(alias_name: str) -> None:
         raise ValueError(f"Unexpected response: {content!r}")
 
 
-@conduwuit_router.get("/rooms/aliases/{alias_name}", tags=["Room Aliases"])
+@continuwuity_router.get("/rooms/aliases/{alias_name}", tags=["Room Aliases"])
 async def get_room_id_from_alias(alias_name: str) -> str:
     """Fetches the room ID from an alias."""
     command = ["!admin", "rooms", "alias", "which", alias_name]
@@ -737,7 +778,7 @@ async def get_room_id_from_alias(alias_name: str) -> str:
     return content
 
 
-@conduwuit_router.get("/rooms/aliases", tags=["Room Aliases"])
+@continuwuity_router.get("/rooms/aliases", tags=["Room Aliases"])
 async def get_all_aliases(room_id: str = None) -> dict[str, str]:
     """
     Get all aliases in use.
@@ -772,5 +813,5 @@ async def get_all_aliases(room_id: str = None) -> dict[str, str]:
 
 from .synapse_compat import router as synapse_compatibility_router
 
-app.include_router(conduwuit_router)
+app.include_router(continuwuity_router)
 app.include_router(synapse_compatibility_router)
